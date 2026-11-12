@@ -6,7 +6,7 @@ using Il2CppHurricaneVR.Framework.Core.Grabbers;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.8.0", "mister67")]
+[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.8.1", "mister67")]
 [assembly: MelonGame("Kubunautilus", "BrutalistickVR")]
 
 namespace ThrowAssist
@@ -119,7 +119,7 @@ namespace ThrowAssist
                 "Стабилизировать ножи", "Разворачивать ножи и кинжалы остриём вперёд и гасить кувырок в полёте.");
 
             _releasedHandler = OnReleased;
-            LoggerInstance.Msg("Throw Assist 1.8.0 загружен.");
+            LoggerInstance.Msg("Throw Assist 1.8.1 загружен.");
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -453,7 +453,8 @@ namespace ThrowAssist
             {
                 string name = ItemName(p.Grabbable, p.Body.transform);
                 bool knife = name.Contains("combatknife") || (name.Contains("knife") && name.Contains("combat"));
-                bool spear = name.Contains("spear") && (name.Contains("short") || name.Contains("long"));
+                // Любое копьё: short/long spear и их варианты (dual_half_spear и т.п.).
+                bool spear = name.Contains("spear");
                 if (!knife && !spear) return true;
                 if (knife && !_knifeAssist.Value) return true;
 
@@ -463,7 +464,7 @@ namespace ThrowAssist
                 if (speed < _minThrowSpeed.Value && p.HandSpeed < _handThrowSpeed.Value) return false;
                 if (velocity.sqrMagnitude < 0.01f) return false;
 
-                if (!FindTip(p.Grabbable, p.Body.transform, p.HandPos, knife, out Vector3 tipDir)) return true;
+                if (!FindTip(p.Grabbable, p.HandPos, out Vector3 tipDir)) return true;
                 if (tipDir.sqrMagnitude < 0.0001f) return true;
 
                 Vector3 flightDir = velocity.normalized;
@@ -484,23 +485,16 @@ namespace ThrowAssist
                     MaxRate = knife ? 30f : 12f
                 });
                 if (_log.Value)
-                    LoggerInstance.Msg($"[Tip] {p.Body.transform.root.name}: {(knife ? "нож" : "копьё")}");
+                    LoggerInstance.Msg($"[Tip] {name}: {(knife ? "нож" : "копьё")}");
                 return true;
             }
             catch (Exception e) { LogErrorOnce(e); return true; }
         }
 
-        /// <summary>Ищет остриё: у ножа — дальняя от руки точка, у копья — дальний конец древка.</summary>
-        bool FindTip(HVRGrabbable g, Transform body, Vector3 handPos, bool knife, out Vector3 tipDir)
+        /// <summary>Остриё — самая дальняя от руки точка коллайдеров.</summary>
+        bool FindTip(HVRGrabbable g, Vector3 handPos, out Vector3 tipDir)
         {
-            tipDir = Vector3.zero;
-            Collider[] all = CollectColliders(g);
-            if (!knife && Elongated(all, body, handPos, out Vector3 tip))
-            {
-                tipDir = tip - handPos;
-                return tipDir.sqrMagnitude > 0.0001f;
-            }
-            tipDir = FarthestPoint(all, handPos) - handPos;
+            tipDir = FarthestPoint(CollectColliders(g), handPos) - handPos;
             return tipDir.sqrMagnitude > 0.0001f;
         }
 
@@ -524,51 +518,6 @@ namespace ThrowAssist
             foreach (char c in s.ToLowerInvariant())
                 if (char.IsLetterOrDigit(c)) chars.Add(c);
             return new string(chars.ToArray());
-        }
-
-        /// <summary>Длинное вытянутое древко: наконечник — дальний от руки конец длинной оси.</summary>
-        static bool Elongated(Collider[] colliders, Transform t, Vector3 handPos, out Vector3 tipWorld)
-        {
-            tipWorld = Vector3.zero;
-            if (colliders == null || colliders.Length == 0 || t == null) return false;
-
-            bool any = false;
-            Vector3 min = Vector3.zero, max = Vector3.zero;
-            foreach (var c in colliders)
-            {
-                if (c == null) continue;
-                Bounds b;
-                try { b = c.bounds; } catch { continue; }
-                Vector3 e = b.extents, ctr = b.center;
-                for (int i = 0; i < 8; i++)
-                {
-                    Vector3 w = ctr + new Vector3(
-                        (i & 1) == 0 ? -e.x : e.x,
-                        (i & 2) == 0 ? -e.y : e.y,
-                        (i & 4) == 0 ? -e.z : e.z);
-                    Vector3 l = t.InverseTransformPoint(w);
-                    if (!any) { min = l; max = l; any = true; }
-                    else { min = Vector3.Min(min, l); max = Vector3.Max(max, l); }
-                }
-            }
-            if (!any) return false;
-
-            Vector3 size = max - min;
-            int k = size.x >= size.y && size.x >= size.z ? 0 : (size.y >= size.z ? 1 : 2);
-            int a = (k + 1) % 3, b2 = (k + 2) % 3;
-            float len = size[k];
-            float thick = Mathf.Max(size[a], size[b2]);
-            if (thick <= 0.0001f || len < 0.12f) return false;
-
-            if (len / thick < 3f || len < 0.8f) return false;
-
-            Vector3 handLocal = t.InverseTransformPoint(handPos);
-            float lo = min[k], hi = max[k];
-            float tipK = Mathf.Abs(hi - handLocal[k]) >= Mathf.Abs(handLocal[k] - lo) ? hi : lo;
-            Vector3 tipLocal = (min + max) * 0.5f;
-            tipLocal[k] = tipK;
-            tipWorld = t.TransformPoint(tipLocal);
-            return true;
         }
 
         void IgnoreHandCollisions(HVRGrabbable g, HVRGrabberBase grabber, Vector3 handPos)
