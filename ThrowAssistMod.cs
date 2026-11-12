@@ -6,7 +6,7 @@ using Il2CppHurricaneVR.Framework.Core.Grabbers;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.7.0", "mister67")]
+[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.8.0", "mister67")]
 [assembly: MelonGame("Kubunautilus", "BrutalistickVR")]
 
 namespace ThrowAssist
@@ -119,7 +119,7 @@ namespace ThrowAssist
                 "Стабилизировать ножи", "Разворачивать ножи и кинжалы остриём вперёд и гасить кувырок в полёте.");
 
             _releasedHandler = OnReleased;
-            LoggerInstance.Msg("Throw Assist 1.7.0 загружен.");
+            LoggerInstance.Msg("Throw Assist 1.8.0 загружен.");
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -442,20 +442,29 @@ namespace ThrowAssist
         }
 
         /// <summary>
-        /// Разворачивает наконечник по траектории и запоминает ось наконечника
-        /// в локальных координатах, чтобы удерживать её в полёте.
+        /// Разворот остриём — только для комбат-ножа и короткого/длинного копья.
+        /// Возвращает true, когда пытаться больше не нужно (не наш предмет или уже развернули).
         /// </summary>
         bool AlignTipFirst(PendingThrow p, Vector3 velocity)
         {
-            if (!_bladeFirst.Value || p.Grabbable == null || velocity.sqrMagnitude < 0.01f) return false;
+            if (!_bladeFirst.Value || p.Grabbable == null) return true;
 
             try
             {
-                Vector3 tipDir;
-                bool blade;
-                if (!FindTip(p.Grabbable, p.Body.transform, p.HandPos, out tipDir, out blade)) return false;
-                if (blade && !_knifeAssist.Value) return false;
-                if (tipDir.sqrMagnitude < 0.0001f) return false;
+                string name = ItemName(p.Grabbable, p.Body.transform);
+                bool knife = name.Contains("combatknife") || (name.Contains("knife") && name.Contains("combat"));
+                bool spear = name.Contains("spear") && (name.Contains("short") || name.Contains("long"));
+                if (!knife && !spear) return true;
+                if (knife && !_knifeAssist.Value) return true;
+
+                // Перехват/выпускание из руки — не бросок: оружие не должно прыгать в позу.
+                float speed;
+                try { speed = p.Body.velocity.magnitude; } catch { return true; }
+                if (speed < _minThrowSpeed.Value && p.HandSpeed < _handThrowSpeed.Value) return false;
+                if (velocity.sqrMagnitude < 0.01f) return false;
+
+                if (!FindTip(p.Grabbable, p.Body.transform, p.HandPos, knife, out Vector3 tipDir)) return true;
+                if (tipDir.sqrMagnitude < 0.0001f) return true;
 
                 Vector3 flightDir = velocity.normalized;
                 Rigidbody rb = p.Body;
@@ -471,67 +480,56 @@ namespace ThrowAssist
                     LocalDir = rb.transform.InverseTransformDirection(tipDir),
                     Left = TipLockTime,
                     // Нож меньше и вертлявее копья: доводим резче и сильнее гасим вращение.
-                    Gain = blade ? 12f : 8f,
-                    MaxRate = blade ? 30f : 12f
+                    Gain = knife ? 12f : 8f,
+                    MaxRate = knife ? 30f : 12f
                 });
                 if (_log.Value)
-                    LoggerInstance.Msg($"[Tip] {p.Body.name}: {(blade ? "нож" : "древко")}");
+                    LoggerInstance.Msg($"[Tip] {p.Body.transform.root.name}: {(knife ? "нож" : "копьё")}");
                 return true;
             }
-            catch (Exception e) { LogErrorOnce(e); return false; }
+            catch (Exception e) { LogErrorOnce(e); return true; }
         }
 
-        /// <summary>
-        /// Ищет наконечник. Сначала острые коллайдеры оружия, иначе дальний конец
-        /// вытянутого предмета — копья-пропы без MeleeWeaponWrapper иначе кувыркаются.
-        /// </summary>
-        bool FindTip(HVRGrabbable g, Transform body, Vector3 handPos, out Vector3 tipDir, out bool blade)
+        /// <summary>Ищет остриё: у ножа — дальняя от руки точка, у копья — дальний конец древка.</summary>
+        bool FindTip(HVRGrabbable g, Transform body, Vector3 handPos, bool knife, out Vector3 tipDir)
         {
             tipDir = Vector3.zero;
-            blade = false;
-            Il2Cpp.MeleeWeaponWrapper wrapper = null;
-            try { wrapper = g.GetComponentInChildren<Il2Cpp.MeleeWeaponWrapper>(); } catch { }
-
-            if (wrapper != null && wrapper.meleeWeaponSO != null &&
-                wrapper.meleeWeaponSO.meleeWeaponType == Il2Cpp.MeleeWeaponType.Sharp)
-            {
-                Collider[] sharp = SharpColliders(wrapper, g);
-                Vector3 far = FarthestPoint(sharp, handPos);
-                tipDir = far - handPos;
-                if (tipDir.sqrMagnitude > 0.0001f) return true;
-            }
-
             Collider[] all = CollectColliders(g);
-            if (Elongated(all, body, handPos, out Vector3 tip, out blade))
+            if (!knife && Elongated(all, body, handPos, out Vector3 tip))
             {
                 tipDir = tip - handPos;
                 return tipDir.sqrMagnitude > 0.0001f;
             }
-
-            // Геометрия не распознала (широкая лопата, вилы, нестандартный коллайдер) —
-            // для названных предметов берём самую дальнюю от руки точку.
-            string n = (g.name + " " + body.name).ToLowerInvariant();
-            if (n.Contains("knife") || n.Contains("dagger") || n.Contains("spear") ||
-                n.Contains("naginata") || n.Contains("shovel") || n.Contains("pitchfork") ||
-                n.Contains("fork") || n.Contains("нож") || n.Contains("копь") || n.Contains("вил"))
-            {
-                blade = n.Contains("knife") || n.Contains("dagger") || n.Contains("нож");
-                Vector3 far = FarthestPoint(all, handPos);
-                tipDir = far - handPos;
-                return tipDir.sqrMagnitude > 0.0001f;
-            }
-            return false;
+            tipDir = FarthestPoint(all, handPos) - handPos;
+            return tipDir.sqrMagnitude > 0.0001f;
         }
 
-        /// <summary>
-        /// Вытянутый предмет: длинный (>= 0.6 м и >= 4 толщин) — копьё/шест,
-        /// короткий (0.12..0.6 м и >= 2.2 толщин) — нож, кинжал, тесак.
-        /// Наконечник — дальний от руки конец длинной оси.
-        /// </summary>
-        static bool Elongated(Collider[] colliders, Transform t, Vector3 handPos, out Vector3 tipWorld, out bool blade)
+        /// <summary>Имя предмета и его корня без регистра и разделителей — для белого списка.</summary>
+        static string ItemName(HVRGrabbable g, Transform body)
+        {
+            string n = Norm(g.name) + "|" + Norm(body.name) + "|" + Norm(body.root.name);
+            try
+            {
+                var w = g.GetComponentInChildren<Il2Cpp.MeleeWeaponWrapper>();
+                if (w != null && w.meleeWeaponSO != null) n += "|" + Norm(w.meleeWeaponSO.name);
+            }
+            catch { }
+            return n;
+        }
+
+        static string Norm(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            var chars = new List<char>(s.Length);
+            foreach (char c in s.ToLowerInvariant())
+                if (char.IsLetterOrDigit(c)) chars.Add(c);
+            return new string(chars.ToArray());
+        }
+
+        /// <summary>Длинное вытянутое древко: наконечник — дальний от руки конец длинной оси.</summary>
+        static bool Elongated(Collider[] colliders, Transform t, Vector3 handPos, out Vector3 tipWorld)
         {
             tipWorld = Vector3.zero;
-            blade = false;
             if (colliders == null || colliders.Length == 0 || t == null) return false;
 
             bool any = false;
@@ -562,11 +560,7 @@ namespace ThrowAssist
             float thick = Mathf.Max(size[a], size[b2]);
             if (thick <= 0.0001f || len < 0.12f) return false;
 
-            blade = len < 0.6f;
-            // Нож: вытянутый, но заметно короче копья. Древко: длинное и вытянутое;
-            // порог 3 (а не 4) — чтобы лопата и вилы с широкой рабочей частью тоже считались.
-            if (len / thick < (blade ? 2.2f : 3f)) return false;
-            if (!blade && len < 0.8f) return false;
+            if (len / thick < 3f || len < 0.8f) return false;
 
             Vector3 handLocal = t.InverseTransformPoint(handPos);
             float lo = min[k], hi = max[k];
@@ -575,50 +569,6 @@ namespace ThrowAssist
             tipLocal[k] = tipK;
             tipWorld = t.TransformPoint(tipLocal);
             return true;
-        }
-
-        static Collider[] SharpColliders(Il2Cpp.MeleeWeaponWrapper wrapper, HVRGrabbable g)
-        {
-            try
-            {
-                var c = FromColliders(wrapper.stabColliders);
-                if (c.Length > 0) return c;
-            }
-            catch { }
-            try
-            {
-                var c = FromObjects(wrapper.bladeColliders);
-                if (c.Length > 0) return c;
-            }
-            catch { }
-            return CollectColliders(g);
-        }
-
-        /// <summary>bladeColliders/stabColliders — массив GameObject'ов, коллайдер висит на них.</summary>
-        static Collider[] FromObjects(Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<GameObject> objs)
-        {
-            if (objs == null) return new Collider[0];
-            var list = new List<Collider>();
-            for (int i = 0; i < objs.Length; i++)
-            {
-                GameObject o = objs[i];
-                if (o == null) continue;
-                Collider c = o.GetComponent<Collider>();
-                if (c != null) list.Add(c);
-            }
-            return list.ToArray();
-        }
-
-        static Collider[] FromColliders(Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppReferenceArray<Collider> objs)
-        {
-            if (objs == null) return new Collider[0];
-            var list = new List<Collider>();
-            for (int i = 0; i < objs.Length; i++)
-            {
-                Collider c = objs[i];
-                if (c != null) list.Add(c);
-            }
-            return list.ToArray();
         }
 
         void IgnoreHandCollisions(HVRGrabbable g, HVRGrabberBase grabber, Vector3 handPos)
