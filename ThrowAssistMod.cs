@@ -6,7 +6,7 @@ using Il2CppHurricaneVR.Framework.Core.Grabbers;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.5.1", "mister67")]
+[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.6.0", "mister67")]
 [assembly: MelonGame("Kubunautilus", "BrutalistickVR")]
 
 namespace ThrowAssist
@@ -62,9 +62,12 @@ namespace ThrowAssist
             public Rigidbody Body;
             public Vector3 LocalDir;
             public float Left;
+            // Насколько резко доворачивать и какой предел угловой скорости.
+            public float Gain;
+            public float MaxRate;
         }
 
-        MelonPreferences_Entry<bool> _enabled, _aimAtHead, _ignoreUnconscious, _bladeFirst, _log, _assistRagdolls;
+        MelonPreferences_Entry<bool> _enabled, _aimAtHead, _ignoreUnconscious, _bladeFirst, _log, _assistRagdolls, _knifeAssist;
         MelonPreferences_Entry<float> _strength, _maxAngle, _maxDistance, _minThrowSpeed, _minAimSpeed, _maxSpeed, _handThrowSpeed, _arc;
         MelonPreferences_Entry<int> _assistLevel;
 
@@ -111,9 +114,11 @@ namespace ThrowAssist
                 "Подробный лог", "Писать в консоль MelonLoader строку на каждый подправленный бросок.");
             _assistRagdolls = MelonPreferences.CreateEntry(cat, "AssistRagdolls", true,
                 "Помогать броскам врагов", "Давать импульс брошенным врагам и манекенам. Выключи, чтобы они летели обычной физикой.");
+            _knifeAssist = MelonPreferences.CreateEntry(cat, "KnifeAssist", true,
+                "Стабилизировать ножи", "Разворачивать ножи и кинжалы остриём вперёд и гасить кувырок в полёте.");
 
             _releasedHandler = OnReleased;
-            LoggerInstance.Msg("Throw Assist 1.5.1 загружен.");
+            LoggerInstance.Msg("Throw Assist 1.6.0 загружен.");
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -275,7 +280,7 @@ namespace ThrowAssist
                 }
                 axis.Normalize();
 
-                float rate = Mathf.Clamp(angle * 8f * Mathf.Deg2Rad, -12f, 12f);
+                float rate = Mathf.Clamp(angle * l.Gain * Mathf.Deg2Rad, -l.MaxRate, l.MaxRate);
                 try { l.Body.angularVelocity = axis * rate; } catch { }
             }
         }
@@ -441,7 +446,9 @@ namespace ThrowAssist
             try
             {
                 Vector3 tipDir;
-                if (!FindTip(p.Grabbable, p.Body.transform, p.HandPos, out tipDir)) return;
+                bool blade;
+                if (!FindTip(p.Grabbable, p.Body.transform, p.HandPos, out tipDir, out blade)) return;
+                if (blade && !_knifeAssist.Value) return;
                 if (tipDir.sqrMagnitude < 0.0001f) return;
 
                 Vector3 flightDir = velocity.normalized;
@@ -456,7 +463,10 @@ namespace ThrowAssist
                     Body = rb,
                     // Ось «рукоять -> наконечник» после разворота, в локальных координатах тела.
                     LocalDir = rb.transform.InverseTransformDirection(tipDir),
-                    Left = TipLockTime
+                    Left = TipLockTime,
+                    // Нож меньше и вертлявее копья: доводим резче и сильнее гасим вращение.
+                    Gain = blade ? 12f : 8f,
+                    MaxRate = blade ? 30f : 12f
                 });
             }
             catch (Exception e) { LogErrorOnce(e); }
@@ -466,9 +476,10 @@ namespace ThrowAssist
         /// Ищет наконечник. Сначала острые коллайдеры оружия, иначе дальний конец
         /// вытянутого предмета — копья-пропы без MeleeWeaponWrapper иначе кувыркаются.
         /// </summary>
-        bool FindTip(HVRGrabbable g, Transform body, Vector3 handPos, out Vector3 tipDir)
+        bool FindTip(HVRGrabbable g, Transform body, Vector3 handPos, out Vector3 tipDir, out bool blade)
         {
             tipDir = Vector3.zero;
+            blade = false;
             Il2Cpp.MeleeWeaponWrapper wrapper = null;
             try { wrapper = g.GetComponentInChildren<Il2Cpp.MeleeWeaponWrapper>(); } catch { }
 
@@ -482,18 +493,20 @@ namespace ThrowAssist
             }
 
             Collider[] all = CollectColliders(g);
-            if (!Elongated(all, body, handPos, out Vector3 tip)) return false;
+            if (!Elongated(all, body, handPos, out Vector3 tip, out blade)) return false;
             tipDir = tip - handPos;
             return tipDir.sqrMagnitude > 0.0001f;
         }
 
         /// <summary>
-        /// Вытянутый предмет (длина >= 0.6 м и >= 4 толщин) — копьё, палка, шест.
+        /// Вытянутый предмет: длинный (>= 0.6 м и >= 4 толщин) — копьё/шест,
+        /// короткий (0.12..0.6 м и >= 2.2 толщин) — нож, кинжал, тесак.
         /// Наконечник — дальний от руки конец длинной оси.
         /// </summary>
-        static bool Elongated(Collider[] colliders, Transform t, Vector3 handPos, out Vector3 tipWorld)
+        static bool Elongated(Collider[] colliders, Transform t, Vector3 handPos, out Vector3 tipWorld, out bool blade)
         {
             tipWorld = Vector3.zero;
+            blade = false;
             if (colliders == null || colliders.Length == 0 || t == null) return false;
 
             bool any = false;
@@ -522,7 +535,11 @@ namespace ThrowAssist
             int a = (k + 1) % 3, b2 = (k + 2) % 3;
             float len = size[k];
             float thick = Mathf.Max(size[a], size[b2]);
-            if (len < 0.6f || thick <= 0.0001f || len / thick < 4f) return false;
+            if (thick <= 0.0001f || len < 0.12f) return false;
+
+            blade = len < 0.6f;
+            // Нож: вытянутый, но заметно короче копья. Копьё: то же плюс более строгая пропорция.
+            if (len / thick < (blade ? 2.2f : 4f)) return false;
 
             Vector3 handLocal = t.InverseTransformPoint(handPos);
             float lo = min[k], hi = max[k];
