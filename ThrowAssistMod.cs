@@ -6,7 +6,7 @@ using Il2CppHurricaneVR.Framework.Core.Grabbers;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.5.0", "mister67")]
+[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.5.1", "mister67")]
 [assembly: MelonGame("Kubunautilus", "BrutalistickVR")]
 
 namespace ThrowAssist
@@ -64,7 +64,7 @@ namespace ThrowAssist
             public float Left;
         }
 
-        MelonPreferences_Entry<bool> _enabled, _aimAtHead, _ignoreUnconscious, _bladeFirst, _log;
+        MelonPreferences_Entry<bool> _enabled, _aimAtHead, _ignoreUnconscious, _bladeFirst, _log, _assistRagdolls;
         MelonPreferences_Entry<float> _strength, _maxAngle, _maxDistance, _minThrowSpeed, _minAimSpeed, _maxSpeed, _handThrowSpeed, _arc;
         MelonPreferences_Entry<int> _assistLevel;
 
@@ -109,9 +109,11 @@ namespace ThrowAssist
                 "Не помогать по лежачим", "Игнорировать оглушённых и без сознания.");
             _log = MelonPreferences.CreateEntry(cat, "Log", false,
                 "Подробный лог", "Писать в консоль MelonLoader строку на каждый подправленный бросок.");
+            _assistRagdolls = MelonPreferences.CreateEntry(cat, "AssistRagdolls", true,
+                "Помогать броскам врагов", "Давать импульс брошенным врагам и манекенам. Выключи, чтобы они летели обычной физикой.");
 
             _releasedHandler = OnReleased;
-            LoggerInstance.Msg("Throw Assist 1.5.0 загружен.");
+            LoggerInstance.Msg("Throw Assist 1.5.1 загружен.");
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -317,6 +319,9 @@ namespace ThrowAssist
 
             Vector3 handPos = HandPosition(grabber);
             IgnoreHandCollisions(grabbable, grabber, handPos);
+
+            // Тело врага — не предмет: импульс только если это разрешено.
+            if (!_assistRagdolls.Value && rb.GetComponentInParent<Il2CppActiveRagdoll.StickHealth>() != null) return;
 
             Vector3 handVel = default;
             float handSpeed = 0f;
