@@ -6,7 +6,7 @@ using Il2CppHurricaneVR.Framework.Core.Grabbers;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.6.0", "mister67")]
+[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.7.0", "mister67")]
 [assembly: MelonGame("Kubunautilus", "BrutalistickVR")]
 
 namespace ThrowAssist
@@ -42,6 +42,7 @@ namespace ThrowAssist
             public bool Applied;
             public Vector3 AppliedVelocity;
             public int Reassert;
+            public bool TipDone;
         }
 
         sealed class IgnorePair
@@ -118,7 +119,7 @@ namespace ThrowAssist
                 "Стабилизировать ножи", "Разворачивать ножи и кинжалы остриём вперёд и гасить кувырок в полёте.");
 
             _releasedHandler = OnReleased;
-            LoggerInstance.Msg("Throw Assist 1.6.0 загружен.");
+            LoggerInstance.Msg("Throw Assist 1.7.0 загружен.");
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -176,7 +177,12 @@ namespace ThrowAssist
                 Vector3 applied;
                 try { done = TryAssist(p, out applied); }
                 catch (Exception e) { LogErrorOnce(e); done = true; applied = default; }
-                if (!done) continue;
+                if (!done)
+                {
+                    // Цели нет — но разворот остриём всё равно нужен: иначе нож летит кувырком.
+                    if (!p.TipDone) p.TipDone = AlignTipFirst(p, p.Body.velocity);
+                    continue;
+                }
 
                 p.Applied = true;
                 p.AppliedVelocity = applied;
@@ -412,7 +418,7 @@ namespace ThrowAssist
 
             applied = Vector3.Lerp(velocity, solved, Mathf.Clamp01(strength));
             rb.velocity = applied;
-            AlignTipFirst(p, applied);
+            if (AlignTipFirst(p, applied)) p.TipDone = true;
 
             if (_log.Value)
                 LoggerInstance.Msg($"[Throw] ур.{_assistLevel.Value} {best.Name}: d={bestDistance:F1} м, угол={bestAngle:F1}°, " +
@@ -439,17 +445,17 @@ namespace ThrowAssist
         /// Разворачивает наконечник по траектории и запоминает ось наконечника
         /// в локальных координатах, чтобы удерживать её в полёте.
         /// </summary>
-        void AlignTipFirst(PendingThrow p, Vector3 velocity)
+        bool AlignTipFirst(PendingThrow p, Vector3 velocity)
         {
-            if (!_bladeFirst.Value || p.Grabbable == null || velocity.sqrMagnitude < 0.01f) return;
+            if (!_bladeFirst.Value || p.Grabbable == null || velocity.sqrMagnitude < 0.01f) return false;
 
             try
             {
                 Vector3 tipDir;
                 bool blade;
-                if (!FindTip(p.Grabbable, p.Body.transform, p.HandPos, out tipDir, out blade)) return;
-                if (blade && !_knifeAssist.Value) return;
-                if (tipDir.sqrMagnitude < 0.0001f) return;
+                if (!FindTip(p.Grabbable, p.Body.transform, p.HandPos, out tipDir, out blade)) return false;
+                if (blade && !_knifeAssist.Value) return false;
+                if (tipDir.sqrMagnitude < 0.0001f) return false;
 
                 Vector3 flightDir = velocity.normalized;
                 Rigidbody rb = p.Body;
@@ -468,8 +474,11 @@ namespace ThrowAssist
                     Gain = blade ? 12f : 8f,
                     MaxRate = blade ? 30f : 12f
                 });
+                if (_log.Value)
+                    LoggerInstance.Msg($"[Tip] {p.Body.name}: {(blade ? "нож" : "древко")}");
+                return true;
             }
-            catch (Exception e) { LogErrorOnce(e); }
+            catch (Exception e) { LogErrorOnce(e); return false; }
         }
 
         /// <summary>
@@ -493,9 +502,25 @@ namespace ThrowAssist
             }
 
             Collider[] all = CollectColliders(g);
-            if (!Elongated(all, body, handPos, out Vector3 tip, out blade)) return false;
-            tipDir = tip - handPos;
-            return tipDir.sqrMagnitude > 0.0001f;
+            if (Elongated(all, body, handPos, out Vector3 tip, out blade))
+            {
+                tipDir = tip - handPos;
+                return tipDir.sqrMagnitude > 0.0001f;
+            }
+
+            // Геометрия не распознала (широкая лопата, вилы, нестандартный коллайдер) —
+            // для названных предметов берём самую дальнюю от руки точку.
+            string n = (g.name + " " + body.name).ToLowerInvariant();
+            if (n.Contains("knife") || n.Contains("dagger") || n.Contains("spear") ||
+                n.Contains("naginata") || n.Contains("shovel") || n.Contains("pitchfork") ||
+                n.Contains("fork") || n.Contains("нож") || n.Contains("копь") || n.Contains("вил"))
+            {
+                blade = n.Contains("knife") || n.Contains("dagger") || n.Contains("нож");
+                Vector3 far = FarthestPoint(all, handPos);
+                tipDir = far - handPos;
+                return tipDir.sqrMagnitude > 0.0001f;
+            }
+            return false;
         }
 
         /// <summary>
@@ -538,8 +563,10 @@ namespace ThrowAssist
             if (thick <= 0.0001f || len < 0.12f) return false;
 
             blade = len < 0.6f;
-            // Нож: вытянутый, но заметно короче копья. Копьё: то же плюс более строгая пропорция.
-            if (len / thick < (blade ? 2.2f : 4f)) return false;
+            // Нож: вытянутый, но заметно короче копья. Древко: длинное и вытянутое;
+            // порог 3 (а не 4) — чтобы лопата и вилы с широкой рабочей частью тоже считались.
+            if (len / thick < (blade ? 2.2f : 3f)) return false;
+            if (!blade && len < 0.8f) return false;
 
             Vector3 handLocal = t.InverseTransformPoint(handPos);
             float lo = min[k], hi = max[k];
