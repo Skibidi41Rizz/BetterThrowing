@@ -6,7 +6,7 @@ using Il2CppHurricaneVR.Framework.Core.Grabbers;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.8.1", "mister67")]
+[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.8.2", "mister67")]
 [assembly: MelonGame("Kubunautilus", "BrutalistickVR")]
 
 namespace ThrowAssist
@@ -69,7 +69,7 @@ namespace ThrowAssist
         }
 
         MelonPreferences_Entry<bool> _enabled, _aimAtHead, _ignoreUnconscious, _bladeFirst, _log, _assistRagdolls, _knifeAssist;
-        MelonPreferences_Entry<float> _strength, _maxAngle, _maxDistance, _minThrowSpeed, _minAimSpeed, _maxSpeed, _handThrowSpeed, _arc;
+        MelonPreferences_Entry<float> _strength, _maxAngle, _maxDistance, _minThrowSpeed, _minAimSpeed, _maxSpeed, _handThrowSpeed, _tipMinSpeed, _arc;
         MelonPreferences_Entry<int> _assistLevel;
 
         readonly List<PendingThrow> _pending = new List<PendingThrow>();
@@ -99,6 +99,8 @@ namespace ThrowAssist
                 "Минимальная скорость броска, м/с", "Медленнее тело — но если рука двигалась быстрее, это всё равно бросок.");
             _handThrowSpeed = MelonPreferences.CreateEntry(cat, "HandThrowSpeed", 2.5f,
                 "Скорость руки для броска, м/с", "Если тело получило меньше MinThrowSpeed, но рука шла быстрее — считаем броском.");
+            _tipMinSpeed = MelonPreferences.CreateEntry(cat, "TipMinSpeed", 6f,
+                "Скорость для разворота остриём, м/с", "Медленнее — это перехват, а не бросок: поза копья и ножа не меняется.");
             _minAimSpeed = MelonPreferences.CreateEntry(cat, "MinAimSpeed", 8f,
                 "Минимальная скорость полёта, м/с", "Только для уровня 0. Слабый бросок всё равно полетит с этой скоростью.");
             _maxSpeed = MelonPreferences.CreateEntry(cat, "MaxSpeed", 30f,
@@ -119,7 +121,7 @@ namespace ThrowAssist
                 "Стабилизировать ножи", "Разворачивать ножи и кинжалы остриём вперёд и гасить кувырок в полёте.");
 
             _releasedHandler = OnReleased;
-            LoggerInstance.Msg("Throw Assist 1.8.1 загружен.");
+            LoggerInstance.Msg("Throw Assist 1.8.2 загружен.");
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -459,9 +461,12 @@ namespace ThrowAssist
                 if (knife && !_knifeAssist.Value) return true;
 
                 // Перехват/выпускание из руки — не бросок: оружие не должно прыгать в позу.
+                // Скорость руки — честный признак броска; скорость тела — запасной вариант,
+                // если замер руки не успел (иначе игра уже разогнала тело ассистом).
                 float speed;
                 try { speed = p.Body.velocity.magnitude; } catch { return true; }
-                if (speed < _minThrowSpeed.Value && p.HandSpeed < _handThrowSpeed.Value) return false;
+                float real = p.HandSpeed > 0.1f ? p.HandSpeed : speed;
+                if (real < _tipMinSpeed.Value) return false;
                 if (velocity.sqrMagnitude < 0.01f) return false;
 
                 if (!FindTip(p.Grabbable, p.HandPos, out Vector3 tipDir)) return true;
