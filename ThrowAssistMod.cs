@@ -6,7 +6,7 @@ using Il2CppHurricaneVR.Framework.Core.Grabbers;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.8.2", "mister67")]
+[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.9.0", "mister67")]
 [assembly: MelonGame("Kubunautilus", "BrutalistickVR")]
 
 namespace ThrowAssist
@@ -23,7 +23,7 @@ namespace ThrowAssist
         const float ScanInterval = 2f;
         const float MaxFlightTime = 3f;
         // Сколько не даём брошенному предмету биться о руку/предплечье игрока.
-        const float HandIgnoreTime = 0.3f;
+        const float HandIgnoreTime = 0.25f; // секунды реального времени, не игрового
         // Сколько кадров держим скорость, если игра перезапишет её после нас.
         const int ReassertFrames = 3;
         // Сколько секунд удерживаем остриё по траектории (длинные броски летят дольше секунды).
@@ -69,7 +69,7 @@ namespace ThrowAssist
         }
 
         MelonPreferences_Entry<bool> _enabled, _aimAtHead, _ignoreUnconscious, _bladeFirst, _log, _assistRagdolls, _knifeAssist;
-        MelonPreferences_Entry<float> _strength, _maxAngle, _maxDistance, _minThrowSpeed, _minAimSpeed, _maxSpeed, _handThrowSpeed, _tipMinSpeed, _arc;
+        MelonPreferences_Entry<float> _strength, _maxAngle, _maxDistance, _minThrowSpeed, _minAimSpeed, _maxSpeed, _handThrowSpeed, _tipMinSpeed, _arc, _headChance;
         MelonPreferences_Entry<int> _assistLevel;
 
         readonly List<PendingThrow> _pending = new List<PendingThrow>();
@@ -101,6 +101,8 @@ namespace ThrowAssist
                 "Скорость руки для броска, м/с", "Если тело получило меньше MinThrowSpeed, но рука шла быстрее — считаем броском.");
             _tipMinSpeed = MelonPreferences.CreateEntry(cat, "TipMinSpeed", 6f,
                 "Скорость для разворота остриём, м/с", "Медленнее — это перехват, а не бросок: поза копья и ножа не меняется.");
+            _headChance = MelonPreferences.CreateEntry(cat, "HeadChance", 25f,
+                "Шанс попадания в голову, %", "Работает, когда AimAtHead выключен: часть бросков всё равно целится в голову.");
             _minAimSpeed = MelonPreferences.CreateEntry(cat, "MinAimSpeed", 8f,
                 "Минимальная скорость полёта, м/с", "Только для уровня 0. Слабый бросок всё равно полетит с этой скоростью.");
             _maxSpeed = MelonPreferences.CreateEntry(cat, "MaxSpeed", 30f,
@@ -121,7 +123,7 @@ namespace ThrowAssist
                 "Стабилизировать ножи", "Разворачивать ножи и кинжалы остриём вперёд и гасить кувырок в полёте.");
 
             _releasedHandler = OnReleased;
-            LoggerInstance.Msg("Throw Assist 1.8.2 загружен.");
+            LoggerInstance.Msg("Throw Assist 1.9.0 загружен.");
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -134,7 +136,7 @@ namespace ThrowAssist
         public override void OnUpdate()
         {
             // Даже при выключенном моде возвращаем столкновения, иначе предмет навсегда пролетает сквозь руку.
-            TickIgnores(Time.deltaTime);
+            TickIgnores();
             HoldTips(Time.deltaTime);
             if (!_enabled.Value) return;
 
@@ -205,13 +207,23 @@ namespace ThrowAssist
             try { p.Body.velocity = p.AppliedVelocity; } catch { }
         }
 
-        void TickIgnores(float dt)
+        void TickIgnores()
         {
             for (int i = _ignores.Count - 1; i >= 0; i--)
             {
                 IgnorePair pair = _ignores[i];
-                pair.Left -= dt;
-                if (pair.Left > 0f) continue;
+                // Реальное время: в слоу-мо игровые секунды тянутся в разы дольше.
+                pair.Left -= Time.unscaledDeltaTime;
+
+                // Отпустили и рука уже не внутри предмета — можно брать снова.
+                bool apart = true;
+                try
+                {
+                    apart = pair.A == null || pair.B == null
+                        || pair.A.bounds.SqrDistance(pair.B.bounds.center) > 0.01f; // 10 см
+                }
+                catch { }
+                if (pair.Left > 0f && !apart) continue;
 
                 try
                 {
@@ -373,7 +385,8 @@ namespace ThrowAssist
             AssistPreset(out angleDeg, out strength, out minAimSpeed);
 
             // Оружие не целится в руки/ноги: голова (по настройке) или корпус.
-            bool head = _aimAtHead.Value;
+            // При выключенном AimAtHead часть бросков всё равно идёт в голову.
+            bool head = _aimAtHead.Value || UnityEngine.Random.value * 100f < _headChance.Value;
 
             Vector3 origin = rb.position;
             ThrowTarget best = null;
