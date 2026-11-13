@@ -6,7 +6,7 @@ using Il2CppHurricaneVR.Framework.Core.Grabbers;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "Throw Assist", "1.9.0", "mister67")]
+[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "BetterThrowing", "1.9.0", "SkIbidiRizTEAM")]
 [assembly: MelonGame("Kubunautilus", "BrutalistickVR")]
 
 namespace ThrowAssist
@@ -84,46 +84,46 @@ namespace ThrowAssist
 
         public override void OnInitializeMelon()
         {
-            const string cat = "ThrowAssist";
+            const string cat = "BetterThrowing";
             _enabled = MelonPreferences.CreateEntry(cat, "Enabled", true,
-                "Включить Throw Assist", "Подправлять броски предметов в сторону цели.");
+                "Enabled", "Correct throws towards a target.");
             _assistLevel = MelonPreferences.CreateEntry(cat, "AssistLevel", 2,
-                "Уровень ассиста (1..5)", "1=слабый, 2=средний, 3=сильный, 4=максимальный, 5=экстрим, 0=ручные MaxAngle/Strength/MinAimSpeed.");
+                "Assist level (1-5, 0 = manual)", "1 = light, 2 = medium, 3 = strong, 4 = maximum, 5 = extreme, 0 = manual MaxAngle/Strength/MinAimSpeed.");
             _strength = MelonPreferences.CreateEntry(cat, "Strength", 1.0f,
-                "Сила помощи (0..1)", "Только для уровня 0. 1 = бросок точно в цель, 0.5 = наполовину.");
+                "Assist strength (0-1)", "Manual mode only. 1 = throw exactly at the target, 0.5 = halfway.");
             _maxAngle = MelonPreferences.CreateEntry(cat, "MaxAngle", 35f,
-                "Угол захвата, градусы", "Только для уровня 0. Цель не дальше этого угла от направления броска.");
+                "Max aim angle, deg", "Manual mode only. Targets farther than this from the throw direction are ignored.");
             _maxDistance = MelonPreferences.CreateEntry(cat, "MaxDistance", 20f,
-                "Максимальная дистанция, м", "Дальше этого цель не выбирается.");
+                "Max target distance, m", "No target is picked beyond this distance.");
             _minThrowSpeed = MelonPreferences.CreateEntry(cat, "MinThrowSpeed", 3f,
-                "Минимальная скорость броска, м/с", "Медленнее тело — но если рука двигалась быстрее, это всё равно бросок.");
+                "Min throw speed, m/s", "Slower body speed is not a throw, unless the hand moved faster (HandThrowSpeed).");
             _handThrowSpeed = MelonPreferences.CreateEntry(cat, "HandThrowSpeed", 2.5f,
-                "Скорость руки для броска, м/с", "Если тело получило меньше MinThrowSpeed, но рука шла быстрее — считаем броском.");
+                "Hand speed for a throw, m/s", "If the body got less than MinThrowSpeed but the hand moved faster, it still counts as a throw.");
             _tipMinSpeed = MelonPreferences.CreateEntry(cat, "TipMinSpeed", 6f,
-                "Скорость для разворота остриём, м/с", "Медленнее — это перехват, а не бросок: поза копья и ножа не меняется.");
+                "Tip-first speed threshold, m/s", "Slower releases are regrips, not throws: the spear/knife pose is not changed.");
             _headChance = MelonPreferences.CreateEntry(cat, "HeadChance", 25f,
-                "Шанс попадания в голову, %", "Работает, когда AimAtHead выключен: часть бросков всё равно целится в голову.");
+                "Head chance, %", "Used when AimAtHead is off: some throws still aim at the head.");
             _minAimSpeed = MelonPreferences.CreateEntry(cat, "MinAimSpeed", 8f,
-                "Минимальная скорость полёта, м/с", "Только для уровня 0. Слабый бросок всё равно полетит с этой скоростью.");
+                "Min aim speed, m/s", "Manual mode only. A weak throw still flies at least at this speed.");
             _maxSpeed = MelonPreferences.CreateEntry(cat, "MaxSpeed", 30f,
-                "Предел скорости, м/с", "Если для попадания нужна скорость выше, бросок не меняется.");
+                "Max throw speed, m/s", "If hitting the target needs more speed, the throw is left as is.");
             _aimAtHead = MelonPreferences.CreateEntry(cat, "AimAtHead", true,
-                "Целиться в голову", "Иначе — в грудь, а если груди нет — в живот. В ноги и руки мод не целится.");
+                "Aim at head", "Otherwise the chest, or the belly if there is no chest. Never aims at arms or legs.");
             _bladeFirst = MelonPreferences.CreateEntry(cat, "BladeFirst", true,
-                "Остриём по траектории", "Разворачивать и удерживать ножи, копья и прочее острое оружие наконечником вперёд.");
+                "Blade/point forward", "Rotate and hold spears and knives tip-first along the flight path.");
             _arc = MelonPreferences.CreateEntry(cat, "Arc", 8f,
-                "Дуга броска, °", "Насколько бросок может подниматься над прямой до цели. Меньше — прямее и быстрее. 0 = максимально прямо.");
+                "Throw arc, deg", "How much the throw may rise above the straight line to the target. Lower = flatter and faster. 0 = as flat as possible.");
             _ignoreUnconscious = MelonPreferences.CreateEntry(cat, "IgnoreUnconscious", false,
-                "Не помогать по лежачим", "Игнорировать оглушённых и без сознания.");
+                "Ignore unconscious", "Do not assist throws at knocked-out or unconscious enemies.");
             _log = MelonPreferences.CreateEntry(cat, "Log", false,
-                "Подробный лог", "Писать в консоль MelonLoader строку на каждый подправленный бросок.");
+                "Verbose log", "Print a line for every assisted throw to the MelonLoader console.");
             _assistRagdolls = MelonPreferences.CreateEntry(cat, "AssistRagdolls", true,
-                "Помогать броскам врагов", "Давать импульс брошенным врагам и манекенам. Выключи, чтобы они летели обычной физикой.");
+                "Assist thrown enemies", "Give the throw impulse to grabbed enemies and dummies too. Off = normal physics.");
             _knifeAssist = MelonPreferences.CreateEntry(cat, "KnifeAssist", true,
-                "Стабилизировать ножи", "Разворачивать ножи и кинжалы остриём вперёд и гасить кувырок в полёте.");
+                "Stabilize knives", "Turn knives and daggers tip-first and stop the tumble in flight.");
 
             _releasedHandler = OnReleased;
-            LoggerInstance.Msg("Throw Assist 1.9.0 загружен.");
+            LoggerInstance.Msg("BetterThrowing 1.9.0 загружен.");
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -656,7 +656,7 @@ namespace ThrowAssist
         {
             if (_errorLogged) return;
             _errorLogged = true;
-            LoggerInstance.Error("Throw Assist: ошибка при обработке броска (дальше молчу): " + e);
+            LoggerInstance.Error("BetterThrowing: ошибка при обработке броска (дальше молчу): " + e);
         }
     }
 }

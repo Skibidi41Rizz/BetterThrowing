@@ -1,7 +1,16 @@
-# Throw Assist — журнал мода
+# BetterThrowing — журнал мода
 
 Мод для BRUTALISTICK VR: помогает попадать брошенными предметами по живым врагам и манекенам.
 Написан с нуля, старый ThrowAimAssist не использовался.
+
+## 1.9.0 — публичный релиз
+
+- Мод переименован в **BetterThrowing** (MelonInfo, DLL, категория конфига `[BetterThrowing]`).
+  Старые значения из `[ThrowAssist]` при первом запуске новой версии сбросятся на умолчания.
+- Названия и описания настроек переведены на понятный английский — для страницы Thunderstore.
+- Собран пакет `thunderstore/`: manifest.json, README.md, CHANGELOG.md, icon.png 256×256, MIT-лицензия.
+  Скрипт `package.ps1` собирает `releases/BetterThrowing-1.9.0.zip` (файлы в корне архива).
+- Репозиторий: https://github.com/Skibidi41Rizz/BetterThrowing
 
 ## v1.9 — быстрый захват после броска и шанс на голову
 

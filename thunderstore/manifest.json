@@ -1,0 +1,9 @@
+{
+  "name": "BetterThrowing",
+  "version_number": "1.9.0",
+  "website_url": "https://github.com/Skibidi41Rizz/BetterThrowing",
+  "description": "Throw assist for BRUTALISTICK VR: aims throws at enemies, makes weak throws reach, and keeps spears and knives flying tip-first.",
+  "dependencies": [
+    "LavaGang-MelonLoader-0.7.3"
+  ]
+}

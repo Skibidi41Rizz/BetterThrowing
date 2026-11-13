@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
-    <AssemblyName>ThrowAssist</AssemblyName>
+    <AssemblyName>BetterThrowing</AssemblyName>
     <RootNamespace>ThrowAssist</RootNamespace>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
