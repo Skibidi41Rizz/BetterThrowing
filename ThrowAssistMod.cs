@@ -6,7 +6,7 @@ using Il2CppHurricaneVR.Framework.Core.Grabbers;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "BetterThrowing", "1.9.0", "SkIbidiRizTEAM")]
+[assembly: MelonInfo(typeof(ThrowAssist.ThrowAssistMod), "BetterThrowing", "1.9.1", "SkIbidiRizTEAM")]
 [assembly: MelonGame("Kubunautilus", "BrutalistickVR")]
 
 namespace ThrowAssist
@@ -87,7 +87,7 @@ namespace ThrowAssist
             const string cat = "BetterThrowing";
             _enabled = MelonPreferences.CreateEntry(cat, "Enabled", true,
                 "Enabled", "Correct throws towards a target.");
-            _assistLevel = MelonPreferences.CreateEntry(cat, "AssistLevel", 2,
+            _assistLevel = MelonPreferences.CreateEntry(cat, "AssistLevel", 4,
                 "Assist level (1-5, 0 = manual)", "1 = light, 2 = medium, 3 = strong, 4 = maximum, 5 = extreme, 0 = manual MaxAngle/Strength/MinAimSpeed.");
             _strength = MelonPreferences.CreateEntry(cat, "Strength", 1.0f,
                 "Assist strength (0-1)", "Manual mode only. 1 = throw exactly at the target, 0.5 = halfway.");
@@ -123,7 +123,7 @@ namespace ThrowAssist
                 "Stabilize knives", "Turn knives and daggers tip-first and stop the tumble in flight.");
 
             _releasedHandler = OnReleased;
-            LoggerInstance.Msg("BetterThrowing 1.9.0 загружен.");
+            LoggerInstance.Msg("BetterThrowing 1.9.1 загружен.");
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)

@@ -18,7 +18,7 @@ Makes no changes to game files and does not touch other players: it is a single-
 
 1. Install [MelonLoader 0.7.3](https://github.com/LavaGang/MelonLoader) for BRUTALISTICK VR.
 2. Drop `BetterThrowing.dll` into the `Mods` folder next to `BrutalistickVR.exe`.
-3. Start the game. The MelonLoader console should print `BetterThrowing 1.9.0 загружен.`
+3. Start the game. The MelonLoader console should print `BetterThrowing 1.9.1 загружен.`
 
 Thunderstore mod managers install the DLL automatically.
 
@@ -29,7 +29,7 @@ Settings live in `UserData/MelonPreferences.cfg` (section `[BetterThrowing]`) an
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `Enabled` | `true` | Turn the assist on or off. |
-| `AssistLevel` | `2` | `1` light, `2` medium, `3` strong, `4` maximum, `5` extreme, `0` manual. |
+| `AssistLevel` | `4` | `1` light, `2` medium, `3` strong, `4` maximum, `5` extreme, `0` manual. |
 | `Strength` | `1.0` | Manual mode only. `1` = full correction, `0.5` = halfway. |
 | `MaxAngle` | `35` | Manual mode only. Max angle between throw direction and target, degrees. |
 | `MaxDistance` | `20` | Max target distance, metres. |

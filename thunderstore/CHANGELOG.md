@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.1
+
+- Default `AssistLevel` is now `4` (maximum).
+
 ## 1.9.0
 
 - Renamed the mod to **BetterThrowing** for the public release.
